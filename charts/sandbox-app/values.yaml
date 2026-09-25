@@ -1,0 +1,53 @@
+# Filled by tools/render_values.py from app.yaml. Reviewed as a PR diff.
+# Anything not derivable from app.yaml is a platform default and lives here.
+
+app:
+  name: example            # from app.yaml .name
+  stack: static            # static | python-web
+  port: 8080
+  entrypoint: ""           # python-web only, e.g. app.main:app
+  owner:
+    email: owner@example.com
+    businessUnit: Unknown
+    sponsor: ""
+  dataClassification: internal
+  ttlDays: 30
+
+image:
+  repository: "<your-acr>.azurecr.io/sandbox/example"
+  tag: "0.0.0"
+  pullPolicy: IfNotPresent
+
+# Egress the app may make beyond DNS. Empty = DNS only. Every entry here was
+# on allowlist.yaml AND approved by a human in the PR.
+egress:
+  fqdns: []
+  # cidrs are rendered from fqdns by the pipeline (Cilium can do FQDN natively;
+  # plain NetworkPolicy needs IPs). Keep both so the chart works on any engine.
+  cidrs: []
+
+# Ephemeral Postgres in the same namespace. No PVC: data dies with the namespace.
+database:
+  enabled: false
+  image: "<your-acr>.azurecr.io/platform/postgres:16-alpine"
+  name: appdb
+  user: app
+
+# Platform defaults. Citizen devs cannot change these; the gate rejects overrides.
+platform:
+  gatewayNamespace: istio-ingress          # only ingress source allowed
+  gatewayName: internal-gateway            # istio Gateway resource
+  gatewaySelector:
+    istio: ingressgateway
+  baseDomain: sandbox.nonprod.metlife.internal
+  ssoRequestPrincipals: ["*"]              # tighten to your Entra issuer/sub pattern
+  dnsNamespace: kube-system
+  resources:
+    requests: { cpu: 100m, memory: 128Mi }
+    limits:   { cpu: 250m, memory: 512Mi }
+  quota:
+    pods: "4"
+    requests.cpu: "500m"
+    requests.memory: "1Gi"
+    limits.cpu: "1"
+    limits.memory: "2Gi"

@@ -1,0 +1,111 @@
+# Layer 1 of 2: CNI-level default deny. Works on Azure NPM, Calico, and Cilium
+# because it uses only the upstream NetworkPolicy API. Catches traffic that
+# never touches the Istio sidecar.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: {{ include "sandbox.namespace" . }}
+spec:
+  podSelector: {}
+  policyTypes: [Ingress, Egress]
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: {{ include "sandbox.namespace" . }}
+spec:
+  podSelector: {}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.platform.dnsNamespace }}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - { protocol: UDP, port: 53 }
+        - { protocol: TCP, port: 53 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-from-gateway
+  namespace: {{ include "sandbox.namespace" . }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.app.name }}
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: {{ .Values.platform.gatewayNamespace }}
+      ports:
+        - { protocol: TCP, port: {{ .Values.app.port }} }
+{{- if .Values.database.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-app-to-db
+  namespace: {{ include "sandbox.namespace" . }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.app.name }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ .Values.app.name }}-db
+      ports:
+        - { protocol: TCP, port: 5432 }
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-db-from-app
+  namespace: {{ include "sandbox.namespace" . }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.app.name }}-db
+  policyTypes: [Ingress]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: {{ .Values.app.name }}
+      ports:
+        - { protocol: TCP, port: 5432 }
+{{- end }}
+{{- if .Values.egress.cidrs }}
+---
+# Rendered only when a human approved needs.egress in the PR.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-approved-egress
+  namespace: {{ include "sandbox.namespace" . }}
+  annotations:
+    sandbox.metlife.internal/approved-fqdns: {{ join "," .Values.egress.fqdns | quote }}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.app.name }}
+  policyTypes: [Egress]
+  egress:
+    - to:
+        {{- range .Values.egress.cidrs }}
+        - ipBlock:
+            cidr: {{ . }}
+        {{- end }}
+      ports:
+        - { protocol: TCP, port: 443 }
+{{- end }}

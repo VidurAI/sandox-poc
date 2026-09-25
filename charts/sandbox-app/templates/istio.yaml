@@ -1,0 +1,74 @@
+# Layer 2 of 2: Istio L7. Only the gateway may call the app; mTLS strict inside
+# the namespace so nothing unauthenticated speaks to the sidecar.
+apiVersion: security.istio.io/v1
+kind: PeerAuthentication
+metadata:
+  name: strict-mtls
+  namespace: {{ include "sandbox.namespace" . }}
+spec:
+  mtls:
+    mode: STRICT
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: deny-all
+  namespace: {{ include "sandbox.namespace" . }}
+spec: {}          # empty spec = deny everything in the namespace
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-gateway-with-sso
+  namespace: {{ include "sandbox.namespace" . }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.app.name }}
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            namespaces: [{{ .Values.platform.gatewayNamespace | quote }}]
+            # requestPrincipals requires a RequestAuthentication on the gateway
+            # that validates the Entra JWT. The negative test asserts a request
+            # with no token is rejected.
+            requestPrincipals: {{ toJson .Values.platform.ssoRequestPrincipals }}
+      to:
+        - operation:
+            ports: [{{ .Values.app.port | quote }}]
+{{- if .Values.database.enabled }}
+---
+apiVersion: security.istio.io/v1
+kind: AuthorizationPolicy
+metadata:
+  name: allow-app-to-db
+  namespace: {{ include "sandbox.namespace" . }}
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.app.name }}-db
+  action: ALLOW
+  rules:
+    - from:
+        - source:
+            principals:
+              - "cluster.local/ns/{{ include "sandbox.namespace" . }}/sa/{{ .Values.app.name }}"
+{{- end }}
+---
+apiVersion: networking.istio.io/v1
+kind: VirtualService
+metadata:
+  name: {{ .Values.app.name }}
+  namespace: {{ include "sandbox.namespace" . }}
+spec:
+  hosts:
+    - {{ include "sandbox.host" . | quote }}
+  gateways:
+    - {{ .Values.platform.gatewayNamespace }}/{{ .Values.platform.gatewayName }}
+  http:
+    - route:
+        - destination:
+            host: {{ .Values.app.name }}.{{ include "sandbox.namespace" . }}.svc.cluster.local
+            port:
+              number: {{ .Values.app.port }}

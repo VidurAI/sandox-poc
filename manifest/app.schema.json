@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://metlife.internal/schemas/sandbox-app.schema.json",
+  "title": "Citizen-developer sandbox app manifest (app.yaml)",
+  "description": "The only file a citizen developer's Cowork skill must emit. Everything the platform needs to build, isolate, and expire the app. No secrets, no infrastructure.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "owner", "stack", "dataClassification", "purpose"],
+  "properties": {
+    "apiVersion": { "type": "string", "const": "sandbox.metlife.internal/v1alpha1" },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]{2,30}$",
+      "description": "DNS-safe app name. Becomes the namespace suffix and the URL slug."
+    },
+    "owner": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["email", "businessUnit"],
+      "properties": {
+        "email": { "type": "string", "format": "email", "description": "Citizen developer. Receives TTL warnings." },
+        "businessUnit": { "type": "string", "minLength": 2 },
+        "sponsor": { "type": "string", "format": "email", "description": "Business reviewer who can claim the app and extend its TTL." }
+      }
+    },
+    "purpose": { "type": "string", "minLength": 20, "maxLength": 500, "description": "One paragraph: what the app does and who reviews it." },
+    "stack": {
+      "type": "string",
+      "enum": ["static", "python-web"],
+      "description": "Pilot supports two stacks. The gate rejects anything else with a plain-language message."
+    },
+    "entrypoint": {
+      "type": "string",
+      "description": "python-web only. ASGI app path, e.g. 'app.main:app'. Ignored for static.",
+      "pattern": "^[a-zA-Z_][a-zA-Z0-9_.]*:[a-zA-Z_][a-zA-Z0-9_]*$"
+    },
+    "port": { "type": "integer", "minimum": 1024, "maximum": 65535, "default": 8080 },
+    "dataClassification": {
+      "type": "string",
+      "enum": ["public", "internal", "synthetic-only"],
+      "description": "Pilot accepts only these. 'confidential' or 'restricted' is rejected: the sandbox never holds real regulated data."
+    },
+    "needs": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "database": {
+          "type": "boolean",
+          "default": false,
+          "description": "Ephemeral Postgres in the same namespace, seeded from seed.sql if present. Deleted with the namespace."
+        },
+        "egress": {
+          "type": "array",
+          "description": "Internal FQDNs the app must reach. Each one must be on the platform allowlist AND is reviewed by a human in the PR. Empty means DNS-only.",
+          "items": { "type": "string", "pattern": "^[a-z0-9.-]+\\.metlife\\.internal$" },
+          "maxItems": 5,
+          "uniqueItems": true
+        }
+      }
+    },
+    "ttlDays": { "type": "integer", "minimum": 7, "maximum": 60, "default": 30 }
+  }
+}

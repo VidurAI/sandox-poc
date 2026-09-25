@@ -1,0 +1,17 @@
+apiVersion: sandbox.metlife.internal/v1alpha1
+name: renewal-tracker
+owner:
+  email: citizen.dev@metlife.com
+  businessUnit: Group Benefits
+  sponsor: business.sponsor@metlife.com
+purpose: >
+  A small FastAPI app that lets a team log renewal touchpoints and see which
+  accounts have gone quiet for more than 14 days. Reviewed by the GB ops lead.
+stack: python-web
+entrypoint: app.main:app
+port: 8080
+dataClassification: synthetic-only
+needs:
+  database: true
+  egress: []
+ttlDays: 30

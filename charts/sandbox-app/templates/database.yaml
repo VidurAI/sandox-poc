@@ -1,0 +1,74 @@
+{{- if .Values.database.enabled }}
+# Ephemeral Postgres. emptyDir on purpose: data dies with the namespace.
+# Password is generated per release; rotate by re-deploying. Never real data.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ .Values.app.name }}-db
+  namespace: {{ include "sandbox.namespace" . }}
+type: Opaque
+stringData:
+  {{- $pw := randAlphaNum 24 }}
+  password: {{ $pw | quote }}
+  url: "postgresql://{{ .Values.database.user }}:{{ $pw }}@{{ .Values.app.name }}-db:5432/{{ .Values.database.name }}"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.app.name }}-db
+  namespace: {{ include "sandbox.namespace" . }}
+spec:
+  selector:
+    app.kubernetes.io/name: {{ .Values.app.name }}-db
+  ports:
+    - { name: pg, port: 5432, targetPort: 5432 }
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.app.name }}-db
+  namespace: {{ include "sandbox.namespace" . }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ .Values.app.name }}-db
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ .Values.app.name }}-db
+    spec:
+      automountServiceAccountToken: false
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 70
+        runAsGroup: 70
+        fsGroup: 70
+        seccompProfile: { type: RuntimeDefault }
+      containers:
+        - name: postgres
+          image: {{ .Values.database.image | quote }}
+          env:
+            - { name: POSTGRES_DB, value: {{ .Values.database.name | quote }} }
+            - { name: POSTGRES_USER, value: {{ .Values.database.user | quote }} }
+            - name: POSTGRES_PASSWORD
+              valueFrom: { secretKeyRef: { name: {{ .Values.app.name }}-db, key: password } }
+            - { name: PGDATA, value: /var/lib/postgresql/data/pgdata }
+          ports:
+            - { containerPort: 5432 }
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities: { drop: [ALL] }
+          resources:
+            requests: { cpu: 100m, memory: 128Mi }
+            limits:   { cpu: 250m, memory: 512Mi }
+          volumeMounts:
+            - { name: data, mountPath: /var/lib/postgresql/data }
+            - { name: run, mountPath: /var/run/postgresql }
+            - { name: tmp, mountPath: /tmp }
+      volumes:
+        - { name: data, emptyDir: {} }
+        - { name: run, emptyDir: {} }
+        - { name: tmp, emptyDir: {} }
+{{- end }}

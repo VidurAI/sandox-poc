@@ -1,0 +1,56 @@
+# Runs hourly. Deletes any sandbox namespace whose expires-at annotation is in
+# the past. A 'claim' = the sponsor moving expires-at forward via the
+# platform's claim endpoint (out of POC scope) — the reaper only reads.
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: sandbox-reaper, namespace: sandbox-platform }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: { name: sandbox-reaper }
+rules:
+  - apiGroups: [""]
+    resources: [namespaces]
+    verbs: [list, get, delete]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: { name: sandbox-reaper }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: sandbox-reaper }
+subjects:
+  - { kind: ServiceAccount, name: sandbox-reaper, namespace: sandbox-platform }
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata: { name: sandbox-reaper, namespace: sandbox-platform }
+spec:
+  schedule: "17 * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: sandbox-reaper
+          restartPolicy: Never
+          securityContext: { runAsNonRoot: true, runAsUser: 10001, seccompProfile: { type: RuntimeDefault } }
+          containers:
+            - name: reaper
+              image: "<your-acr>.azurecr.io/platform/kubectl:1.31"
+              securityContext: { allowPrivilegeEscalation: false, readOnlyRootFilesystem: true, capabilities: { drop: [ALL] } }
+              env:
+                - { name: DRY_RUN, value: "true" }   # flip to "false" once the drill in the pilot plan passes
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  now=$(date -u +%s)
+                  kubectl get ns -l app.kubernetes.io/managed-by=sandbox-platform \
+                    -o jsonpath='{range .items[*]}{.metadata.name}{" "}{.metadata.annotations.sandbox\.metlife\.internal/expires-at}{"\n"}{end}' |
+                  while read -r ns exp; do
+                    [ -n "$exp" ] || continue
+                    expsec=$(date -u -d "$exp" +%s 2>/dev/null || echo 0)
+                    if [ "$expsec" -gt 0 ] && [ "$expsec" -lt "$now" ]; then
+                      if [ "$DRY_RUN" = "true" ]; then echo "would delete $ns (expired $exp)";
+                      else echo "deleting $ns (expired $exp)"; kubectl delete ns "$ns" --wait=false; fi
+                    fi
+                  done

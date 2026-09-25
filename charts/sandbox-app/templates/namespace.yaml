@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: {{ include "sandbox.namespace" . }}
+  labels:
+    {{- include "sandbox.labels" . | nindent 4 }}
+    istio-injection: enabled            # sidecar is mandatory; negative test asserts it
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/enforce-version: latest
+  annotations:
+    sandbox.metlife.internal/owner: {{ .Values.app.owner.email | quote }}
+    sandbox.metlife.internal/sponsor: {{ .Values.app.owner.sponsor | quote }}
+    sandbox.metlife.internal/business-unit: {{ .Values.app.owner.businessUnit | quote }}
+    sandbox.metlife.internal/ttl-days: {{ .Values.app.ttlDays | quote }}
+    # Set by the pipeline at deploy time; the reaper compares against now.
+    sandbox.metlife.internal/expires-at: {{ .Values.expiresAt | default "1970-01-01T00:00:00Z" | quote }}

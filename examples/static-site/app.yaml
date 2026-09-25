@@ -1,0 +1,12 @@
+apiVersion: sandbox.metlife.internal/v1alpha1
+name: claims-glossary
+owner:
+  email: citizen.dev@metlife.com
+  businessUnit: US Claims Operations
+  sponsor: business.sponsor@metlife.com
+purpose: >
+  A static reference site that combines the claims glossary, escalation matrix,
+  and regional contact list into one searchable page for adjusters.
+stack: static
+dataClassification: internal
+ttlDays: 30

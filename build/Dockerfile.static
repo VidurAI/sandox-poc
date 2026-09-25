@@ -1,0 +1,4 @@
+# Platform-owned. Serves the prebuilt site/ folder; nothing runs at build time.
+FROM <your-acr>.azurecr.io/platform/nginx-unprivileged:1.27-alpine
+COPY site/ /usr/share/nginx/html/
+EXPOSE 8080

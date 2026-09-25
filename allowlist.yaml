@@ -1,0 +1,44 @@
+# THE single source of truth read by BOTH the Cowork skill and the CI gate.
+# If the skill and the gate ever disagree, adoption dies quietly. One file.
+apiVersion: sandbox.metlife.internal/v1alpha1
+kind: Allowlist
+
+stacks:
+  static:
+    image: "<your-acr>.azurecr.io/platform/nginx-unprivileged:1.27-alpine"
+    port: 8080
+    description: Static HTML/CSS/JS served by unprivileged nginx. Zero egress.
+  python-web:
+    image: "<your-acr>.azurecr.io/platform/python-web:3.12-slim"
+    port: 8080
+    description: Python 3.12 + uvicorn. DNS-only egress unless app.yaml asks for more.
+
+# Python packages a citizen-dev app may declare in requirements.txt.
+# Pinned in the skill's template; the gate checks names only (pins are checked by SCA).
+python:
+  - fastapi
+  - uvicorn
+  - starlette
+  - pydantic
+  - sqlalchemy
+  - psycopg
+  - jinja2
+  - httpx
+  - python-multipart
+  - pandas
+  - openpyxl
+
+# npm packages allowed for static-site build steps (none in pilot: static means prebuilt).
+npm: []
+
+# Internal FQDNs an app may request in app.yaml needs.egress.
+# Being on this list does NOT grant access; a human still approves the PR.
+egress:
+  - "api-nonprod.metlife.internal"
+  - "glossary-nonprod.metlife.internal"
+
+# Sandbox never holds regulated data.
+dataClassification:
+  - public
+  - internal
+  - synthetic-only

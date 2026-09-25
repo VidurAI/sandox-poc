@@ -1,0 +1,11 @@
+apiVersion: v2
+name: sandbox-app
+description: >
+  One parametric chart for every citizen-developer sandbox app. Platform owns
+  the templates; an agent fills values.yaml from app.yaml and opens a PR.
+  Default-deny at two layers (NetworkPolicy + Istio AuthorizationPolicy),
+  non-root, read-only rootfs, quota, and a TTL annotation the reaper honors.
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.30.0-0"
